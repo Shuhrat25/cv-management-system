@@ -1,0 +1,179 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ================= Enums =================
+
+enum Role {
+  CANDIDATE
+  RECRUITER
+  ADMIN
+}
+
+enum AttributeType {
+  STRING
+  TEXT
+  IMAGE
+  NUMERIC
+  DATE
+  PERIOD
+  BOOLEAN
+  DROPDOWN
+}
+
+enum AttributeCategory {
+  CERTIFICATION
+  DOMAIN_KNOWLEDGE
+  PERSONAL_INFO
+  SOFT_SKILLS
+}
+
+// ================= Основные модели =================
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  role      Role     @default(CANDIDATE)
+  
+  // Вкладка "Me" (Обязательные неизменяемые рекрутерами атрибуты)
+  firstName String
+  lastName  String
+  location  String?
+  photoUrl  String?
+  
+  // Версия для оптимистичной блокировки (Optimistic Locking)
+  version   Int      @default(1) 
+
+  // Связи
+  profileValues ProfileValue[]
+  projects      Project[]
+  cvs           CV[]
+  likes         CvLike[]
+  posts         DiscussionPost[]
+}
+
+// ================= Библиотека Атрибутов =================
+
+model Attribute {
+  id          String            @id @default(uuid())
+  name        String            @unique
+  category    AttributeCategory
+  type        AttributeType
+  description String?
+
+  // Связи
+  profileValues      ProfileValue[]
+  positionAttributes PositionAttribute[]
+}
+
+// Это таблица "Value" из паттерна EAV. Хранит ответы кандидатов.
+model ProfileValue {
+  id          String    @id @default(uuid())
+  
+  // Значение всегда хранится как строка. 
+  // Если тип BOOLEAN, тут будет "true"/"false". Если NUMERIC — "42". 
+  // Фронтенд или сервисный слой приводит типы на основе Attribute.type
+  value       String    
+  
+  version     Int       @default(1) // Оптимистичная блокировка при автосохранении
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  
+  attribute   Attribute @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+  attributeId String
+
+  // У одного пользователя может быть только одно значение для конкретного атрибута
+  @@unique([userId, attributeId]) 
+}
+
+// ================= Проекты =================
+
+model Project {
+  id          String   @id @default(uuid())
+  name        String
+  startDate   DateTime
+  endDate     DateTime? // Null если по настоящее время
+  description String    // Markdown текст
+  tags        String[]  // В PostgreSQL можно использовать нативный массив строк
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+}
+
+// ================= Вакансии (Шаблоны CV) =================
+
+model Position {
+  id           String   @id @default(uuid())
+  title        String
+  shortDesc    String?
+  
+  // Правила доступа можно хранить в виде сериализованной строки (например, "score>7;remote=true"),
+  // так как по ним мы будем фильтровать на уровне логики (или можно вынести в отдельную таблицу)
+  accessRules  String?  
+  maxProjects  Int      @default(3)
+  
+  version      Int      @default(1)
+
+  // Связи
+  attributes   PositionAttribute[]
+  cvs          CV[]
+  discussions  DiscussionPost[]
+}
+
+// Сводная таблица (Многие-ко-многим) между Вакансией и Библиотекой атрибутов
+model PositionAttribute {
+  position   Position  @relation(fields: [positionId], references: [id], onDelete: Cascade)
+  positionId String
+  
+  attribute  Attribute @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+  attributeId String
+
+  @@id([positionId, attributeId])
+}
+
+// ================= Резюме (CV) и Обсуждения =================
+
+// Само CV не хранит атрибуты! Оно является "представлением" (view),
+// связывающим Кандидата и Вакансию.
+model CV {
+  id          String   @id @default(uuid())
+  isPublished Boolean  @default(false)
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  
+  position    Position @relation(fields: [positionId], references: [id], onDelete: Cascade)
+  positionId  String
+
+  likes       CvLike[]
+
+  // Кандидат может иметь только одно резюме на одну вакансию
+  @@unique([userId, positionId])
+}
+
+model CvLike {
+  cv        CV    @relation(fields: [cvId], references: [id], onDelete: Cascade)
+  cvId      String
+  
+  user      User  @relation(fields: [userId], references: [id], onDelete: Cascade) // Рекрутер
+  userId    String
+
+  @@id([cvId, userId]) // Один рекрутер = один лайк на одно резюме
+}
+
+model DiscussionPost {
+  id         String   @id @default(uuid())
+  content    String   // Markdown
+  createdAt  DateTime @default(now())
+
+  author     User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  authorId   String
+
+  position   Position @relation(fields: [positionId], references: [id], onDelete: Cascade)
+  positionId String
+}
