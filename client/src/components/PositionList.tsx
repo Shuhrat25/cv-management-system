@@ -50,11 +50,9 @@ export const PositionList: React.FC = () => {
   const [availableAttributes, setAvailableAttributes] = useState<Attribute[]>([]);
   const [openModal, setOpenModal] = useState(false);
 
-  // Стейты для модалки CV
   const [selectedPositionId, setSelectedPositionId] = useState<string | null>(null);
   const [openCvModal, setOpenCvModal] = useState(false);
 
-  // Форма новой вакансии
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [selectedAttrMap, setSelectedAttrMap] = useState<
@@ -275,7 +273,6 @@ export const PositionList: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Модальное окно генерации CV */}
       <CvGeneratorModal
         open={openCvModal}
         positionId={selectedPositionId}
