@@ -17,7 +17,16 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5001;
 
-app.use(cors());
+// app.use(cors());
+app.use(cors({
+  origin: [
+    'https://cv-management-system-57ra-dun.vercel.app',
+    'https://cv-management-system-57ra-git-main-shuhrat25s-projects.vercel.app',
+    'https://cv-management-system-57ra-c9yncc4nf-shuhrat25s-projects.vercel.app'
+  ],
+  credentials: true
+}));
+
 app.use(express.json());
 
 // Routes
