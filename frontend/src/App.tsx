@@ -13,6 +13,7 @@ import { CvDetailPage } from './pages/CvDetailPage';
 import { UserManagementPage } from './pages/UserManagementPage';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
+import { OAuthCallbackPage } from './pages/OAuthCallbackPage';
 
 export const AppContent: React.FC = () => {
   const [showIntegrationsModal, setShowIntegrationsModal] = useState(false);
@@ -32,6 +33,7 @@ export const AppContent: React.FC = () => {
           <Route path="/users" element={<UserManagementPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/oauth-callback" element={<OAuthCallbackPage />} />
         </Routes>
       </main>
 

@@ -3,6 +3,9 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../prisma';
 import { authenticate, AuthRequest } from '../middleware/auth';
+import { OAuth2Client } from 'google-auth-library';
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-course-project-key-2026';
@@ -112,6 +115,116 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
     res.json(user);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Google Sign-In
+router.post('/google', async (req, res) => {
+  try {
+    const { credential } = req.body;
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    if (!payload?.email) {
+      return res.status(400).json({ error: 'Invalid Google token' });
+    }
+
+    let user = await prisma.user.findUnique({ where: { email: payload.email } });
+    if (!user) {
+      const randomPassword = await bcrypt.hash(Math.random().toString(36).slice(2), 10);
+      user = await prisma.user.create({
+        data: {
+          email: payload.email,
+          passwordHash: randomPassword,
+          name: payload.name || payload.email,
+          role: 'CANDIDATE',
+          avatarUrl: payload.picture,
+        },
+      });
+    }
+    if (user.isBlocked) {
+      return res.status(403).json({ error: 'Account has been blocked' });
+    }
+
+    const token = generateToken(user);
+    res.json({
+      token,
+      user: { id: user.id, email: user.email, name: user.name, role: user.role, location: user.location, avatarUrl: user.avatarUrl },
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GitHub OAuth - Step 1: redirect to GitHub
+router.get('/github', (_req, res) => {
+  const redirectUri = `https://github.com/login/oauth/authorize?client_id=${process.env.GITHUB_CLIENT_ID}&scope=read:user user:email`;
+  res.redirect(redirectUri);
+});
+
+// GitHub OAuth - Step 2: handle callback
+router.get('/github/callback', async (req, res) => {
+  try {
+    const { code } = req.query;
+    if (!code) {
+      return res.redirect(`${process.env.FRONTEND_URL}/login?error=github_no_code`);
+    }
+
+    const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        client_id: process.env.GITHUB_CLIENT_ID,
+        client_secret: process.env.GITHUB_CLIENT_SECRET,
+        code,
+      }),
+    });
+    const tokenData: any = await tokenRes.json();
+
+    if (!tokenData.access_token) {
+      return res.redirect(`${process.env.FRONTEND_URL}/login?error=github_token_failed`);
+    }
+
+    const userRes = await fetch('https://api.github.com/user', {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    });
+    const ghUser: any = await userRes.json();
+
+    const emailRes = await fetch('https://api.github.com/user/emails', {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    });
+    const emails: any = await emailRes.json();
+    const primaryEmail =
+      Array.isArray(emails) ? emails.find((e: any) => e.primary)?.email || emails[0]?.email : ghUser.email;
+
+    if (!primaryEmail) {
+      return res.redirect(`${process.env.FRONTEND_URL}/login?error=github_no_email`);
+    }
+
+    let user = await prisma.user.findUnique({ where: { email: primaryEmail } });
+    if (!user) {
+      const randomPassword = await bcrypt.hash(Math.random().toString(36).slice(2), 10);
+      user = await prisma.user.create({
+        data: {
+          email: primaryEmail,
+          passwordHash: randomPassword,
+          name: ghUser.name || ghUser.login,
+          role: 'CANDIDATE',
+          avatarUrl: ghUser.avatar_url,
+        },
+      });
+    }
+
+    if (user.isBlocked) {
+      return res.redirect(`${process.env.FRONTEND_URL}/login?error=account_blocked`);
+    }
+
+    const token = generateToken(user);
+    res.redirect(`${process.env.FRONTEND_URL}/oauth-callback?token=${token}`);
+  } catch (err: any) {
+    res.redirect(`${process.env.FRONTEND_URL}/login?error=github_failed`);
   }
 });
 
