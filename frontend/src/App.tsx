@@ -11,6 +11,8 @@ import { PositionDetailPage } from './pages/PositionDetailPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { CvDetailPage } from './pages/CvDetailPage';
 import { UserManagementPage } from './pages/UserManagementPage';
+import { LoginPage } from './pages/LoginPage';
+import { RegisterPage } from './pages/RegisterPage';
 
 export const AppContent: React.FC = () => {
   const [showIntegrationsModal, setShowIntegrationsModal] = useState(false);
@@ -28,6 +30,8 @@ export const AppContent: React.FC = () => {
           <Route path="/profile/:userId?" element={<ProfilePage />} />
           <Route path="/cvs/:id" element={<CvDetailPage />} />
           <Route path="/users" element={<UserManagementPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
         </Routes>
       </main>
 
