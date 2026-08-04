@@ -66,13 +66,13 @@ export const DashboardPage: React.FC = () => {
 
   const filteredPositions = selectedTag
     ? latestPositions.filter((p) => {
-        try {
-          const tags: string[] = JSON.parse(p.projectTagsJson || '[]');
-          return tags.includes(selectedTag);
-        } catch (e) {
-          return false;
-        }
-      })
+      try {
+        const tags: string[] = JSON.parse(p.projectTagsJson || '[]');
+        return tags.includes(selectedTag);
+      } catch (e) {
+        return false;
+      }
+    })
     : latestPositions;
 
   return (
@@ -82,20 +82,20 @@ export const DashboardPage: React.FC = () => {
         <div className="relative z-10 max-w-3xl space-y-4">
           <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-xs font-bold backdrop-blur-sm">
             <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-            <span>Smart Candidate & Position Matching Platform</span>
+            <span>{t('heroTag')}</span>
           </div>
           <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight leading-tight">
-            Reusable Attributes & Automated CV Generation
+            {t('heroTitle')}
           </h1>
           <p className="text-slate-200 text-sm md:text-base leading-relaxed">
-            Create customizable position templates, build reusable candidate profiles, and assemble dynamically formatted CVs in seconds.
+            {t('heroDesc')}
           </p>
           <div className="flex flex-wrap items-center gap-3 pt-2">
             <button
               onClick={() => navigate('/positions')}
               className="px-6 py-3 bg-white text-blue-700 font-extrabold text-xs rounded-xl shadow-lg hover:bg-slate-100 transition-all flex items-center space-x-2"
             >
-              <span>Browse All Positions</span>
+              <span>{t('browseAllPositions')}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
@@ -167,7 +167,7 @@ export const DashboardPage: React.FC = () => {
           </div>
           {selectedTag && (
             <span className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300 font-bold px-3 py-1 rounded-full">
-              Filtered by Tag: #{selectedTag}
+              {t('filteredByTag')}: #{selectedTag}
             </span>
           )}
         </div>
@@ -177,19 +177,19 @@ export const DashboardPage: React.FC = () => {
           totalCount={filteredPositions.length}
           onView={selectedLatestPosId ? () => navigate(`/positions/${selectedLatestPosId}`) : undefined}
           onCreateNew={() => navigate('/positions')}
-          createButtonLabel="Browse Positions Table"
+          createButtonLabel={t('browsePositionsTable')}
         />
 
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-100/70 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                <th className="p-4 w-12 text-center">Select</th>
-                <th className="p-4">Position Title</th>
-                <th className="p-4">Created By</th>
-                <th className="p-4 text-center">Submitted CVs</th>
-                <th className="p-4">Project Tags</th>
-                <th className="p-4 text-right">Updated</th>
+                <th className="p-4 w-12 text-center">{t('colSelect')}</th>
+                <th className="p-4">{t('colPositionTitle')}</th>
+                <th className="p-4">{t('colCreatedBy')}</th>
+                <th className="p-4 text-center">{t('colSubmittedCVs')}</th>
+                <th className="p-4">{t('colProjectTags')}</th>
+                <th className="p-4 text-right">{t('colUpdated')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-sm">
@@ -201,11 +201,10 @@ export const DashboardPage: React.FC = () => {
                   <tr
                     key={pos.id}
                     onClick={() => setSelectedLatestPosId(isSelected ? null : pos.id)}
-                    className={`cursor-pointer transition-colors ${
-                      isSelected
-                        ? 'bg-blue-500/10 dark:bg-blue-500/20'
-                        : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
-                    }`}
+                    className={`cursor-pointer transition-colors ${isSelected
+                      ? 'bg-blue-500/10 dark:bg-blue-500/20'
+                      : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                      }`}
                   >
                     <td className="p-4 text-center" onClick={(e) => e.stopPropagation()}>
                       <input
@@ -220,7 +219,7 @@ export const DashboardPage: React.FC = () => {
                       <div className="text-xs text-slate-500 dark:text-slate-400 line-clamp-1">{pos.description}</div>
                     </td>
                     <td className="p-4 font-semibold text-slate-700 dark:text-slate-300">
-                      {pos.createdBy?.name || 'Recruiter'}
+                      {pos.createdBy?.name || t('recruiterFallback')}
                     </td>
                     <td className="p-4 text-center">
                       <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
@@ -261,11 +260,11 @@ export const DashboardPage: React.FC = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-100/70 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                <th className="p-4 w-12 text-center">Rank</th>
-                <th className="p-4">Position Title</th>
-                <th className="p-4">Recruiter</th>
-                <th className="p-4 text-center">Total CV Submissions</th>
-                <th className="p-4 text-right">Action</th>
+                <th className="p-4 w-12 text-center">{t('colRank')}</th>
+                <th className="p-4">{t('colPositionTitle')}</th>
+                <th className="p-4">{t('colRecruiter')}</th>
+                <th className="p-4 text-center">{t('colTotalSubmissions')}</th>
+                <th className="p-4 text-right">{t('colAction')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-sm">
@@ -285,7 +284,7 @@ export const DashboardPage: React.FC = () => {
                       onClick={() => navigate(`/positions/${pos.id}`)}
                       className="px-3 py-1.5 text-xs font-bold bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow"
                     >
-                      View Details
+                      {t('viewDetails')}
                     </button>
                   </td>
                 </tr>
