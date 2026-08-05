@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../prisma';
+import { createSalesforceRecord } from '../services/salesforce';
 
 const router = Router();
 
@@ -99,35 +100,34 @@ router.get('/odoo/position-data/:apiToken', async (req, res) => {
   }
 });
 
-// Salesforce Lead/Contact Generator API
+// Salesforce Account/Contact Generator API
 router.post('/salesforce/create-contact', async (req, res) => {
   try {
     const { userId, additionalNotes, targetProduct } = req.body;
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const sfPayload = {
-      Account: {
-        Name: `${user.name} Organization`,
-        Type: 'Customer - Direct',
-        BillingCity: user.location || 'Tashkent',
-      },
-      Contact: {
-        FirstName: user.name.split(' ')[0] || user.name,
-        LastName: user.name.split(' ').slice(1).join(' ') || 'Candidate',
-        Email: user.email,
-        Role__c: user.role,
-        Target_Product__c: targetProduct || 'CV Matching Enterprise',
-        Notes__c: additionalNotes || 'Created via Course Project Integration',
-      },
-      CreatedDate: new Date().toISOString(),
-      Status: 'Success',
-      SalesforceId: `SF-${Math.random().toString(36).substring(2, 9).toUpperCase()}`,
-    };
+    // 1. Создаём Account
+    const accountResult = await createSalesforceRecord('Account', {
+      Name: `${user.name} Organization`,
+      Type: 'Customer - Direct',
+      BillingCity: user.location || 'Tashkent',
+    });
+
+    // 2. Создаём Contact, привязанный к Account
+    const [firstName, ...rest] = user.name.split(' ');
+    const contactResult = await createSalesforceRecord('Contact', {
+      AccountId: accountResult.id,
+      FirstName: firstName || user.name,
+      LastName: rest.join(' ') || 'Candidate',
+      Email: user.email,
+      Description: `Role: ${user.role}. Target: ${targetProduct || 'CV Matching'}. Notes: ${additionalNotes || ''}`,
+    });
 
     res.json({
-      message: 'Salesforce Account and Linked Contact created successfully',
-      salesforceRecord: sfPayload,
+      message: 'Salesforce Account and Contact created successfully',
+      accountId: accountResult.id,
+      contactId: contactResult.id,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
