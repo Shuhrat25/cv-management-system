@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../prisma';
-import { createSalesforceRecord } from '../services/salesforce';
+import { createSalesforceRecord, getSalesforceToken } from '../services/salesforce';
 
 const router = Router();
 
@@ -129,6 +129,15 @@ router.post('/salesforce/create-contact', async (req, res) => {
       accountId: accountResult.id,
       contactId: contactResult.id,
     });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/salesforce/test-auth', async (req, res) => {
+  try {
+    const token = await getSalesforceToken();
+    res.json({ success: true, instance_url: token.instance_url });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
