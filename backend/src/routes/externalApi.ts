@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../prisma';
 import { createSalesforceRecord, getSalesforceToken } from '../services/salesforce';
+import { uploadToDropbox } from '../services/dropbox';
 
 const router = Router();
 
@@ -144,6 +145,7 @@ router.get('/salesforce/test-auth', async (req, res) => {
 });
 
 // Power Automate Support Ticket Generator
+
 router.post('/power-automate/create-ticket', async (req, res) => {
   try {
     const { reportedBy, userRole, positionTitle, pageLink, priority, summary, adminEmail } = req.body;
@@ -159,9 +161,13 @@ router.post('/power-automate/create-ticket', async (req, res) => {
       Timestamp: new Date().toISOString(),
     };
 
+    const fileName = `ticket-${ticketJson.TicketId}.json`;
+    await uploadToDropbox(fileName, ticketJson);
+
     res.json({
-      message: 'Power Automate Ticket JSON generated successfully',
+      message: 'Support ticket generated and uploaded to Dropbox successfully',
       ticket: ticketJson,
+      fileName,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
