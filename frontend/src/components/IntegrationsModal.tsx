@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Send, Database, Cloud, FileText, CheckCircle, Copy } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { X, Send, Database, Cloud, FileText, CheckCircle, Copy, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest } from '../services/api';
 
@@ -8,6 +8,14 @@ interface IntegrationsModalProps {
   onClose: () => void;
   positionTitle?: string;
   apiToken?: string;
+}
+
+interface SalesforceStatus {
+  connected: boolean;
+  checkedAt: string | null;
+  cached: boolean;
+  nextCheckAt: string | null;
+  readOnly: true;
 }
 
 export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
@@ -27,6 +35,9 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
   const [sfConnection, setSfConnection] = useState<{ instance_url: string; writesEnabled: boolean } | null>(null);
   const [sfConnectionError, setSfConnectionError] = useState('');
   const [isSfChecking, setIsSfChecking] = useState(false);
+  const [sfStatus, setSfStatus] = useState<SalesforceStatus | null>(null);
+  const [sfStatusError, setSfStatusError] = useState('');
+  const [isSfStatusChecking, setIsSfStatusChecking] = useState(false);
 
   // Power Automate state
   const [ticketSummary, setTicketSummary] = useState('');
@@ -36,6 +47,27 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
 
   // Odoo state
   const [copiedToken, setCopiedToken] = useState(false);
+
+  const handleSalesforceStatusCheck = useCallback(async (signal?: AbortSignal) => {
+    setIsSfStatusChecking(true);
+    setSfStatusError('');
+    setSfStatus(null);
+    try {
+      const status = await apiRequest<SalesforceStatus>('/external/salesforce/status', { signal });
+      if (!signal?.aborted) setSfStatus(status);
+    } catch {
+      if (!signal?.aborted) setSfStatusError('The connection check could not be reached. Please try again.');
+    } finally {
+      if (!signal?.aborted) setIsSfStatusChecking(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen || activeTab !== 'salesforce') return;
+    const controller = new AbortController();
+    void handleSalesforceStatusCheck(controller.signal);
+    return () => controller.abort();
+  }, [isOpen, activeTab, handleSalesforceStatusCheck]);
 
   if (!isOpen) return null;
 
@@ -124,6 +156,7 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
           </div>
           <button
             onClick={onClose}
+            aria-label="Close integrations"
             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
           >
             <X className="w-5 h-5" />
@@ -170,16 +203,58 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
           {activeTab === 'salesforce' && (
             <div>
               <p className="text-xs text-slate-600 dark:text-slate-400 mb-4">
-                A dedicated integration administrator can verify the Salesforce connection. This check does not create records. Profile export is available only when enabled by the project owner.
+                Check the live connection between TalentPulse and Salesforce. This read-only check does not create or change CRM records.
               </p>
+              <div
+                role="status"
+                aria-live="polite"
+                className={`mb-4 rounded-xl border p-4 ${
+                  sfStatus?.connected && !isSfStatusChecking
+                    ? 'border-emerald-300 bg-emerald-50 dark:border-emerald-700 dark:bg-emerald-950/30'
+                    : sfStatus || sfStatusError
+                      ? 'border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/30'
+                      : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/50'
+                }`}
+              >
+                <div className="flex items-center gap-2 font-bold text-sm text-slate-900 dark:text-slate-100">
+                  {isSfStatusChecking ? <Loader2 className="h-5 w-5 animate-spin" /> : sfStatus?.connected ? <CheckCircle className="h-5 w-5 text-emerald-600" /> : <AlertCircle className="h-5 w-5 text-amber-600" />}
+                  <span>{isSfStatusChecking ? 'Checking Salesforce...' : sfStatus?.connected ? 'Salesforce connected' : sfStatus || sfStatusError ? 'Salesforce connection unavailable' : 'Salesforce not checked yet'}</span>
+                </div>
+                <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">
+                  {isSfStatusChecking
+                    ? 'TalentPulse is checking authorization and read-only API access.'
+                    : sfStatus?.connected
+                      ? 'OAuth authorization and a read-only Salesforce API request succeeded.'
+                      : sfStatusError || 'A successful live connection has not been confirmed. Please try again later.'}
+                </p>
+                {!isSfStatusChecking && sfStatus?.checkedAt && (
+                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                    Last checked: <time dateTime={sfStatus.checkedAt}>{new Date(sfStatus.checkedAt).toLocaleString()}</time>
+                    {sfStatus.cached && ' · Recent server result'}
+                  </p>
+                )}
+                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Read-only check · Results refresh at most once per minute.</p>
+              </div>
               <button
                 type="button"
-                onClick={handleSalesforceCheck}
-                disabled={isSfChecking || isSfLoading}
+                onClick={() => void handleSalesforceStatusCheck()}
+                disabled={isSfStatusChecking}
                 className="mb-3 px-4 py-2 text-xs font-bold bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-300 dark:border-slate-700 disabled:opacity-50"
               >
-                {isSfChecking ? 'Checking connection...' : 'Verify Salesforce connection'}
+                {isSfStatusChecking ? 'Checking connection...' : 'Verify Salesforce connection'}
               </button>
+
+              <details className="mt-3 border-t border-slate-200 dark:border-slate-700 pt-4">
+                <summary className="cursor-pointer text-xs font-bold text-slate-600 dark:text-slate-300">Profile export for authorized administrators</summary>
+                <p className="my-3 text-xs text-slate-500 dark:text-slate-400">Demo accounts cannot export profiles. Record creation requires separate access and must be enabled by the project owner.</p>
+                <button
+                  type="button"
+                  onClick={handleSalesforceCheck}
+                  disabled={isSfChecking || isSfLoading}
+                  className="mb-3 px-4 py-2 text-xs font-bold bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-300 dark:border-slate-700 disabled:opacity-50"
+                >
+                  {isSfChecking ? 'Checking permissions...' : 'Check export permissions'}
+                </button>
               {sfConnectionError && <p role="alert" className="mb-3 text-xs text-red-600 dark:text-red-400">{sfConnectionError}</p>}
               {sfConnection && (
                 <p role="status" className="mb-3 text-xs text-emerald-700 dark:text-emerald-400">
@@ -229,6 +304,7 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                   </pre>
                 </div>
               )}
+              </details>
             </div>
           )}
 

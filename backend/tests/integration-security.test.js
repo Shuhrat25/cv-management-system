@@ -36,7 +36,7 @@ function request(path, { method = 'GET', body, bearer } = {}) {
     } }, (res) => {
       let text = '';
       res.on('data', (chunk) => { text += chunk; });
-      res.on('end', () => resolve({ status: res.statusCode, data: text ? JSON.parse(text) : {} }));
+      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, data: text ? JSON.parse(text) : {} }));
     });
     req.on('error', reject);
     req.end(payload);
@@ -75,7 +75,7 @@ after(async () => {
   await new Promise((resolve) => server.close(resolve));
 });
 
-test('all Salesforce paths reject unauthenticated callers before an external request', async () => {
+test('protected Salesforce paths reject unauthenticated callers before an external request', async () => {
   for (const [path, method] of [['/test-auth', 'GET'], ['/create-contact', 'POST'], ['/future-endpoint', 'GET']]) {
     const result = await request(`/api/external/salesforce${path}`, { method, body: method === 'POST' ? {} : undefined });
     assert.equal(result.status, 401);
@@ -95,6 +95,42 @@ test('writes stay disabled even for the dedicated integration operator', async (
   assert.equal(result.status, 403);
   assert.match(result.data.error, /disabled/);
   assert.equal(networkCalls, 0);
+});
+
+test('anonymous and demo callers can see only the cached read-only Salesforce status', async () => {
+  const originalClientId = process.env.SF_CLIENT_ID;
+  process.env.SF_CLIENT_ID = 'synthetic-public-status-client';
+  const calls = [];
+  global.fetch = async (url, init) => {
+    calls.push({ url, method: init.method || 'GET' });
+    if (url.endsWith('/services/oauth2/token')) {
+      return new Response(JSON.stringify({ access_token: 'synthetic-private-token', instance_url: 'https://unit-test.my.salesforce.com' }));
+    }
+    assert.ok(url.endsWith('/limits'));
+    return new Response(JSON.stringify({ DailyApiRequests: { Max: 100, Remaining: 77 } }));
+  };
+  try {
+    const first = await request('/api/external/salesforce/status');
+    assert.equal(first.status, 200);
+    assert.equal(first.headers['cache-control'], 'no-store');
+    assert.deepEqual(Object.keys(first.data).sort(), ['cached', 'checkedAt', 'connected', 'nextCheckAt', 'readOnly']);
+    assert.equal(first.data.connected, true);
+    assert.equal(first.data.readOnly, true);
+    assert.equal(first.data.cached, false);
+    assert.ok(Date.parse(first.data.checkedAt));
+    const demo = await request('/api/external/salesforce/status?force=true&url=https://attacker.example', { bearer: token('seed-admin') });
+    assert.equal(demo.status, 200);
+    assert.equal(demo.data.connected, true);
+    assert.equal(demo.data.checkedAt, first.data.checkedAt);
+    assert.equal(demo.data.cached, true);
+    assert.deepEqual(calls.map((call) => call.method), ['POST', 'GET']);
+    assert.doesNotMatch(JSON.stringify([first.data, demo.data]), /synthetic|token|secret|instance|Remaining|Max|salesforce\.com/);
+    assert.equal((await request('/api/external/salesforce/test-auth')).status, 401);
+    assert.equal((await request('/api/external/salesforce/test-auth', { bearer: token('seed-admin') })).status, 403);
+  } finally {
+    process.env.SF_CLIENT_ID = originalClientId;
+    global.fetch = async () => { networkCalls++; throw new Error('Unexpected external request'); };
+  }
 });
 
 test('authenticated connection verification calls only token and read-only limits endpoints', async () => {

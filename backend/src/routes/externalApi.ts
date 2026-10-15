@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../prisma';
 import { createSalesforceAccountContact, verifySalesforceConnection, SalesforceError } from '../services/salesforce';
+import { getPublicSalesforceStatus } from '../services/salesforceStatus';
 import { authenticate, requireIntegrationAdmin, AuthRequest } from '../middleware/auth';
 import { uploadToDropbox } from '../services/dropbox';
 
@@ -100,6 +101,12 @@ router.get('/odoo/position-data/:apiToken', async (req, res) => {
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// The public demo exposes only a cached read-only connection result, never CRM data or credentials.
+router.get('/salesforce/status', async (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json(await getPublicSalesforceStatus());
 });
 
 // Salesforce Account/Contact Generator API
