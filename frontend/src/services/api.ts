@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_URL;
+const API_BASE = import.meta.env.VITE_API_URL || 'https://cv-management-system-6oyt.onrender.com/api';
 
 export interface ApiError {
   error: string;
