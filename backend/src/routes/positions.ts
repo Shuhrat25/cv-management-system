@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { prisma } from '../prisma';
-import { authenticate, requireRole, AuthRequest } from '../middleware/auth';
+import { authenticate, optionalAuthenticate, requireRole, AuthRequest } from '../middleware/auth';
+import { serializePosition } from '../serializers/position';
 
 const router = Router();
 
@@ -50,7 +51,7 @@ export async function evaluateAccessRules(candidateId: string, accessRulesJsonSt
 }
 
 // Get positions list
-router.get('/', async (req: AuthRequest, res: Response) => {
+router.get('/', optionalAuthenticate, async (req: AuthRequest, res: Response) => {
   try {
     const search = req.query.search ? String(req.query.search) : undefined;
     const candidateId = req.query.candidateId ? String(req.query.candidateId) : undefined;
@@ -81,7 +82,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
         positions.map(async (pos) => {
           const accessInfo = await evaluateAccessRules(candidateId, pos.accessRulesJson);
           return {
-            ...pos,
+            ...serializePosition(pos, req.user),
             isEligible: accessInfo.isEligible,
             failedRules: accessInfo.failedRules,
           };
@@ -90,14 +91,14 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       return res.json(results);
     }
 
-    res.json(positions);
+    res.json(positions.map((position) => serializePosition(position, req.user)));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // Get single position details
-router.get('/:id', async (req, res) => {
+router.get('/:id', optionalAuthenticate, async (req: AuthRequest, res: Response) => {
   try {
     const posId = String(req.params.id);
     const position = await prisma.position.findUnique({
@@ -126,7 +127,7 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Position not found' });
     }
 
-    res.json(position);
+    res.json(serializePosition(position, req.user));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -176,7 +177,7 @@ router.post('/', authenticate, requireRole('RECRUITER', 'ADMIN'), async (req: Au
       },
     });
 
-    res.json(created);
+    res.json(created ? serializePosition(created, req.user) : created);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -221,7 +222,7 @@ router.post('/:id/duplicate', authenticate, requireRole('RECRUITER', 'ADMIN'), a
       )
     );
 
-    res.json(duplicated);
+    res.json(serializePosition(duplicated, req.user));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -279,7 +280,7 @@ router.put('/:id', authenticate, requireRole('RECRUITER', 'ADMIN'), async (req: 
       include: { attributes: { include: { attribute: true } } },
     });
 
-    res.json(fullUpdated);
+    res.json(fullUpdated ? serializePosition(fullUpdated, req.user) : fullUpdated);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

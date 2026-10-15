@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_talentpulse_connection_list" model="ir.ui.view">
+        <field name="name">talentpulse.connection.list</field>
+        <field name="model">talentpulse.connection</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="name"/>
+                <field name="base_url"/>
+                <field name="position_title"/>
+                <field name="submitted_cv_count"/>
+                <field name="last_fetched_at"/>
+            </list>
+        </field>
+    </record>
+    <record id="view_talentpulse_connection_form" model="ir.ui.view">
+        <field name="name">talentpulse.connection.form</field>
+        <field name="model">talentpulse.connection</field>
+        <field name="arch" type="xml">
+            <form string="TalentPulse connection">
+                <header>
+                    <button name="action_fetch_aggregates" type="object" string="Fetch aggregates"
+                            class="oe_highlight" groups="base.group_system"/>
+                </header>
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="base_url" placeholder="https://your-backend.example.com"/>
+                        <field name="position_token" password="True" groups="base.group_system"/>
+                    </group>
+                    <group string="Last imported position summary">
+                        <field name="position_id"/>
+                        <field name="position_title"/>
+                        <field name="position_description"/>
+                        <field name="submitted_cv_count"/>
+                        <field name="last_fetched_at"/>
+                    </group>
+                    <group string="Aggregate statistics">
+                        <field name="aggregate_json" nolabel="1"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+    <record id="action_talentpulse_connections" model="ir.actions.act_window">
+        <field name="name">TalentPulse aggregates</field>
+        <field name="res_model">talentpulse.connection</field>
+        <field name="view_mode">list,form</field>
+    </record>
+    <menuitem id="menu_talentpulse_root" name="TalentPulse" groups="base.group_system"/>
+    <menuitem id="menu_talentpulse_connections" name="Position aggregates" parent="menu_talentpulse_root"
+              action="action_talentpulse_connections" groups="base.group_system"/>
+</odoo>

@@ -24,6 +24,9 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
   const [sfNotes, setSfNotes] = useState('');
   const [sfResponse, setSfResponse] = useState<any>(null);
   const [isSfLoading, setIsSfLoading] = useState(false);
+  const [sfConnection, setSfConnection] = useState<{ instance_url: string; writesEnabled: boolean } | null>(null);
+  const [sfConnectionError, setSfConnectionError] = useState('');
+  const [isSfChecking, setIsSfChecking] = useState(false);
 
   // Power Automate state
   const [ticketSummary, setTicketSummary] = useState('');
@@ -36,9 +39,22 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
 
   if (!isOpen) return null;
 
+  const handleSalesforceCheck = async () => {
+    setIsSfChecking(true);
+    setSfConnectionError('');
+    setSfConnection(null);
+    try {
+      setSfConnection(await apiRequest('/external/salesforce/test-auth'));
+    } catch (err: any) {
+      setSfConnectionError(err.error || 'Salesforce connection could not be verified.');
+    } finally {
+      setIsSfChecking(false);
+    }
+  };
+
   const handleSalesforceSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user || !sfConnection?.writesEnabled) return;
     setIsSfLoading(true);
     try {
       const res = await apiRequest('/external/salesforce/create-contact', {
@@ -154,8 +170,22 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
           {activeTab === 'salesforce' && (
             <div>
               <p className="text-xs text-slate-600 dark:text-slate-400 mb-4">
-                Sync current profile ({user?.name}) with Salesforce CRM to create a linked Account & Contact record via REST API.
+                A dedicated integration administrator can verify the Salesforce connection. This check does not create records. Profile export is available only when enabled by the project owner.
               </p>
+              <button
+                type="button"
+                onClick={handleSalesforceCheck}
+                disabled={isSfChecking || isSfLoading}
+                className="mb-3 px-4 py-2 text-xs font-bold bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-300 dark:border-slate-700 disabled:opacity-50"
+              >
+                {isSfChecking ? 'Checking connection...' : 'Verify Salesforce connection'}
+              </button>
+              {sfConnectionError && <p role="alert" className="mb-3 text-xs text-red-600 dark:text-red-400">{sfConnectionError}</p>}
+              {sfConnection && (
+                <p role="status" className="mb-3 text-xs text-emerald-700 dark:text-emerald-400">
+                  Connected to {sfConnection.instance_url}. {sfConnection.writesEnabled ? `Export of your profile (${user?.name}) is enabled.` : 'Record creation remains disabled.'}
+                </p>
+              )}
 
               {!sfResponse ? (
                 <form onSubmit={handleSalesforceSubmit} className="space-y-4">
@@ -164,6 +194,7 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                     <input
                       type="text"
                       value={targetProduct}
+                      maxLength={160}
                       onChange={(e) => setTargetProduct(e.target.value)}
                       className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
                     />
@@ -173,6 +204,7 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                     <textarea
                       rows={3}
                       value={sfNotes}
+                      maxLength={2000}
                       onChange={(e) => setSfNotes(e.target.value)}
                       placeholder="Candidate interests, skills summary..."
                       className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
@@ -180,7 +212,7 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                   </div>
                   <button
                     type="submit"
-                    disabled={isSfLoading}
+                    disabled={isSfLoading || !sfConnection?.writesEnabled}
                     className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-lg shadow-blue-500/25 transition-all"
                   >
                     {isSfLoading ? 'Syncing to Salesforce...' : 'Create Salesforce Account & Contact'}
@@ -193,7 +225,7 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                     <span>{sfResponse.message}</span>
                   </div>
                   <pre className="text-[11px] bg-slate-900 text-emerald-300 p-3 rounded-lg overflow-x-auto font-mono">
-                    {JSON.stringify(sfResponse.salesforceRecord, null, 2)}
+                    {JSON.stringify({ accountId: sfResponse.accountId, contactId: sfResponse.contactId }, null, 2)}
                   </pre>
                 </div>
               )}

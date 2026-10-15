@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../prisma';
+import { serializePosition } from '../serializers/position';
 
 const router = Router();
 
@@ -87,8 +88,9 @@ router.get('/', async (_req, res) => {
         totalRecruiters,
         totalCVs,
       },
-      latestPositions,
-      mostPopularPositions,
+      // Dashboard aggregates remain public and never contain integration tokens.
+      latestPositions: latestPositions.map((position) => serializePosition(position)),
+      mostPopularPositions: mostPopularPositions.map((position) => serializePosition(position)),
       tagCloud,
     });
   } catch (err: any) {

@@ -2,18 +2,16 @@ import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../prisma';
-import { authenticate, AuthRequest } from '../middleware/auth';
+import { authenticate, AuthRequest, getJwtSecret, isSeededDemoUser } from '../middleware/auth';
 import { OAuth2Client } from 'google-auth-library';
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-course-project-key-2026';
-
-const generateToken = (user: { id: string; email: string; role: string; name: string }) => {
+const generateToken = (user: { id: string; email: string; role: string; name: string }, isDemo = isSeededDemoUser(user)) => {
   return jwt.sign(
-    { id: user.id, email: user.email, role: user.role, name: user.name },
-    JWT_SECRET,
+    { id: user.id, email: user.email, role: user.role, name: user.name, isDemo },
+    getJwtSecret(),
     { expiresIn: '7d' }
   );
 };
@@ -24,6 +22,9 @@ router.post('/register', async (req, res) => {
     const { email, password, name, role, location } = req.body;
     if (!email || !password || !name) {
       return res.status(400).json({ error: 'Email, password, and name are required' });
+    }
+    if (role === 'ADMIN') {
+      return res.status(403).json({ error: 'Administrator accounts cannot be created through public registration.' });
     }
 
     const existing = await prisma.user.findUnique({ where: { email } });
@@ -37,7 +38,7 @@ router.post('/register', async (req, res) => {
         email,
         passwordHash,
         name,
-        role: role === 'RECRUITER' ? 'RECRUITER' : role === 'ADMIN' ? 'ADMIN' : 'CANDIDATE',
+        role: role === 'RECRUITER' ? 'RECRUITER' : 'CANDIDATE',
         location: location || 'Tashkent, Uzbekistan',
       },
     });
@@ -75,12 +76,13 @@ router.post('/login', async (req, res) => {
 
 // Get Demo Accounts for seamless switching
 router.get('/demo-users', async (_req, res) => {
+  if (process.env.DEMO_SEED !== 'true') return res.json([]);
   try {
     const users = await prisma.user.findMany({
       select: { id: true, email: true, name: true, role: true, avatarUrl: true, location: true },
       orderBy: { createdAt: 'asc' },
     });
-    res.json(users);
+    res.json(users.filter(isSeededDemoUser));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -88,17 +90,21 @@ router.get('/demo-users', async (_req, res) => {
 
 // Switch to demo user
 router.post('/switch-demo', async (req, res) => {
+  if (process.env.DEMO_SEED !== 'true') return res.status(403).json({ error: 'Demo switching is disabled.' });
   try {
     const { userId } = req.body;
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
+    if (!isSeededDemoUser(user)) {
+      return res.status(403).json({ error: 'Only seeded demonstration accounts can be selected.' });
+    }
     if (user.isBlocked) {
       return res.status(403).json({ error: 'Account is blocked' });
     }
 
-    const token = generateToken(user);
+    const token = generateToken(user, true);
     res.json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role, location: user.location, avatarUrl: user.avatarUrl } });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

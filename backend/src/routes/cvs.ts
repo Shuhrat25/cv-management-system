@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { prisma } from '../prisma';
-import { authenticate, AuthRequest } from '../middleware/auth';
+import { authenticate, optionalAuthenticate, AuthRequest } from '../middleware/auth';
+import { serializePosition } from '../serializers/position';
 
 const router = Router();
 
@@ -53,7 +54,7 @@ router.post('/generate', authenticate, async (req: AuthRequest, res: Response) =
 });
 
 // View Full Generated CV by CV ID
-router.get('/:id', async (req: AuthRequest, res: Response) => {
+router.get('/:id', optionalAuthenticate, async (req: AuthRequest, res: Response) => {
   try {
     const cvId = String(req.params.id);
 
@@ -142,7 +143,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
         likedByRecruiterIds: cv.likes.map((l: { recruiterId: string }) => l.recruiterId),
       },
       candidate: cv.candidate,
-      position: cv.position,
+      position: serializePosition(cv.position, req.user),
       attributes: compiledAttributes,
       projects: displayedProjects,
       canPublish,

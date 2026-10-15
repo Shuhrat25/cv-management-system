@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../prisma';
-import { createSalesforceRecord, getSalesforceToken } from '../services/salesforce';
+import { createSalesforceAccountContact, verifySalesforceConnection, SalesforceError } from '../services/salesforce';
+import { authenticate, requireIntegrationAdmin, AuthRequest } from '../middleware/auth';
 import { uploadToDropbox } from '../services/dropbox';
 
 const router = Router();
@@ -102,23 +103,30 @@ router.get('/odoo/position-data/:apiToken', async (req, res) => {
 });
 
 // Salesforce Account/Contact Generator API
-router.post('/salesforce/create-contact', async (req, res) => {
+router.use('/salesforce', authenticate, requireIntegrationAdmin);
+
+router.post('/salesforce/create-contact', async (req: AuthRequest, res) => {
   try {
+    if (process.env.SF_WRITES_ENABLED !== 'true') {
+      return res.status(403).json({ error: 'Salesforce record creation is disabled.' });
+    }
     const { userId, additionalNotes, targetProduct } = req.body;
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (userId !== undefined && userId !== req.user!.id) {
+      return res.status(403).json({ error: 'Only your own profile can be exported.' });
+    }
+    if ((additionalNotes !== undefined && (typeof additionalNotes !== 'string' || additionalNotes.length > 2000)) ||
+        (targetProduct !== undefined && (typeof targetProduct !== 'string' || targetProduct.length > 160))) {
+      return res.status(400).json({ error: 'Invalid product or notes. Maximum lengths are 160 and 2000 characters.' });
+    }
+    const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    // 1. Создаём Account
-    const accountResult = await createSalesforceRecord('Account', {
+    const [firstName, ...rest] = user.name.split(' ');
+    const records = await createSalesforceAccountContact({
       Name: `${user.name} Organization`,
       Type: 'Customer - Direct',
       BillingCity: user.location || 'Tashkent',
-    });
-
-    // 2. Создаём Contact, привязанный к Account
-    const [firstName, ...rest] = user.name.split(' ');
-    const contactResult = await createSalesforceRecord('Contact', {
-      AccountId: accountResult.id,
+    }, {
       FirstName: firstName || user.name,
       LastName: rest.join(' ') || 'Candidate',
       Email: user.email,
@@ -127,20 +135,22 @@ router.post('/salesforce/create-contact', async (req, res) => {
 
     res.json({
       message: 'Salesforce Account and Contact created successfully',
-      accountId: accountResult.id,
-      contactId: contactResult.id,
+      ...records,
     });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (err) {
+    res.status(err instanceof SalesforceError ? err.status : 500).json({
+      error: err instanceof SalesforceError ? err.message : 'Salesforce export could not be completed.',
+    });
   }
 });
 
 router.get('/salesforce/test-auth', async (req, res) => {
   try {
-    const token = await getSalesforceToken();
-    res.json({ success: true, instance_url: token.instance_url });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.json(await verifySalesforceConnection());
+  } catch (err) {
+    res.status(err instanceof SalesforceError ? err.status : 500).json({
+      error: err instanceof SalesforceError ? err.message : 'Salesforce connection could not be verified.',
+    });
   }
 });
 
